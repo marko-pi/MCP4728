@@ -7,9 +7,9 @@ The core of the project is an OOP (object oriented programming) compatible C lib
 - There is no need for any other library (RPi.GPIO, pigpio...) to execute the code;
 - The bitbanging part of the library is much faster and time consistent (see below).
 
-![PulseView screenshot](/two_chips_read_address.png)
-
 Reading and writing address for the MCP4728 chip requires an additional LDAC line and is not I2C protocol compliant.  Therefore bitbanging must be used.  The target frequency for bitbanging is 100 kHz, but the de facto frequency is about 90 kHz.  Executing C programs is simply not as efficient as using kernel procedures.
+
+![PulseView screenshot](/two_chips_read_address.png)
 
 The output voltages are changed uses kernel procedures.
 
