@@ -1,5 +1,5 @@
 # MCP4728
-Raspberry Pi library for the MCP4728 chip.  It allows
+Raspberry Pi library for the MCP4728 Quad DAC chip.  It allows
 - reading/writing the address by bitbanging at three arbitrary GPIO pins,
 - changing the output voltages by kernel procedures on both i2c-0 and i2c-1 busses.
 
