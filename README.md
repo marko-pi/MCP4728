@@ -13,6 +13,8 @@ Reading and writing address for the MCP4728 chip requires an additional LDAC lin
 
 The output voltages are changed uses kernel procedures.
 
+You can find the application circuit with some additional instructions on this [page](http://www.pinteric.com/raspberry.html#dac).
+
 The library provides eight public functions: two functions for initialisation/de-initialisation, two functions for reading/writing the address and four functions for changing the output voltages.  The description of the functions is given in the Python test file (MCP4728_test.py).
 
 A simple Python script is provided as an example of how to use the library. A proper Python library could easily be created to wrap up all procedures into a standard Python class. Since I assume that only advanced users will use this library, I think that the Python example script will be sufficient.
