@@ -1,10 +1,7 @@
 import time
 from ctypes import cdll, c_int, c_float, c_bool, c_void_p, POINTER
 
-class chippointer(c_void_p):
-    pass
-
-# Wrapping C library
+###### Wrapping C library ######
 MCP4728 = cdll.LoadLibrary("./MCP4728.so")
 
 """
@@ -19,7 +16,7 @@ chip = initialise(16,20,21,-1)       # opens an instance of the chip at an unkno
 chip = initialise(0,1,16,-1)         # opens an instance of the chip at an unknown address and allows both reading/writing the address and changing the output voltages over the i2c-0 bus
 """
 initialise = MCP4728.initialise
-initialise.restype = chippointer
+initialise.restype = c_void_p
 initialise.argtypes = [c_int, c_int, c_int, c_int]
 
 """
@@ -28,7 +25,7 @@ deinitialise(object)
 Removes the instance of the chip.  Recommended but not mandatory at the end of the program.
 """
 deinitialise = MCP4728.deinitialise
-deinitialise.argtypes = [chippointer]
+deinitialise.argtypes = [c_void_p]
 
 """
 address = getaddress(object)
@@ -36,6 +33,7 @@ address = getaddress(object)
 Reads the current chip address.  The obtained address is automatically stored by the library.  LDAC mandatory.
 """
 getaddress = MCP4728.getaddress
+getaddress.argtypes = [c_void_p]
 
 """
 setaddress(object, address)
@@ -43,7 +41,7 @@ setaddress(object, address)
 Writes the new chip address.  The current chip address must be supplied by the programmer or read with getaddress beforehand.  LDAC mandatory.
 """
 setaddress = MCP4728.setaddress
-setaddress.argtypes = [chippointer, c_int]
+setaddress.argtypes = [c_void_p, c_int]
 
 """
 singleinternal(object, channel, voltage, eeprom)
@@ -51,7 +49,7 @@ singleinternal(object, channel, voltage, eeprom)
 Sets the absolute voltange on the channel using the internal voltage reference.  The eeprom indicates whether the voltage is written to the EEPROM of the chip.  SDA/SLC must be 0/1 or 2/3.
 """
 singleinternal = MCP4728.singleinternal
-singleinternal.argtypes = [chippointer, c_int, c_float, c_bool]
+singleinternal.argtypes = [c_void_p, c_int, c_float, c_bool]
 
 """
 singleexternal(object, channel, voltage, eeprom)
@@ -59,7 +57,7 @@ singleexternal(object, channel, voltage, eeprom)
 Sets the relative voltange on the channel using the external voltage reference.  The eeprom indicates whether the voltage is written to the EEPROM of the chip.  SDA/SLC must be 0/1 or 2/3.
 """
 singleexternal = MCP4728.singleexternal
-singleexternal.argtypes = [chippointer, c_int, c_float, c_bool]
+singleexternal.argtypes = [c_void_p, c_int, c_float, c_bool]
 
 """
 multipleinternal(object, [voltages], eeprom)
@@ -67,7 +65,7 @@ multipleinternal(object, [voltages], eeprom)
 Sets the absolute voltanges on all four channels using the internal voltage reference.  The eeprom indicates whether the voltages are written to the EEPROM of the chip.  SDA/SLC must be 0/1 or 2/3.
 """
 multipleinternal = MCP4728.multipleinternal
-multipleinternal.argtypes = [chippointer, POINTER(c_float), c_bool]
+multipleinternal.argtypes = [c_void_p, POINTER(c_float), c_bool]
 
 """
 multipleexternal(object, [voltages], eeprom)
@@ -75,14 +73,14 @@ multipleexternal(object, [voltages], eeprom)
 Sets the relative voltanges on all four channels using the external voltage reference.  The eeprom indicates whether the voltages are written to the EEPROM of the chip.  SDA/SLC must be 0/1 or 2/3.
 """
 multipleexternal = MCP4728.multipleexternal
-multipleexternal.argtypes = [chippointer, POINTER(c_float), c_bool]
+multipleexternal.argtypes = [c_void_p, POINTER(c_float), c_bool]
 
 
-###### TEST EXAMPLE ######
+###### Test example ######
 
 # creates instances of two chips with unknown addresses, both reading/writing the address and changing the output voltages over the i2c-1 bus allowed.
-chip1 = initialise(2,3,16,0)
-chip2 = initialise(2,3,20,0)
+chip1 = initialise(2,3,16,-1)
+chip2 = initialise(2,3,20,-1)
 
 # gets both addresses
 res1 = getaddress(chip1)
@@ -92,12 +90,12 @@ print('Chip I2C addresses: 0x%x 0x%x' % (res1, res2))
 
 # sets four absolute voltages on the first chip
 voltages=[1.0,1.5,2.0,2.5]
-floats = (c_float*4)(*voltages)
+floats = (c_float*4)(*voltages) # voltage list has to be trasferred in the C compatible array
 multipleinternal(chip1,floats,False)
 
 # sets four absolute voltages on the second chip
 voltages=[0.5,1.0,1.5,2.0]
-floats = (c_float*4)(*voltages)
+floats = (c_float*4)(*voltages) # voltage list has to be trasferred in the C compatible array
 multipleinternal(chip2,floats,False)
 
 # sets one absolute voltage on the first chip on channel 4
