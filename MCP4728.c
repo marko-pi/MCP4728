@@ -2,7 +2,7 @@
    Marko Pinteric 2020
    GPIO communication based on Tiny GPIO Access on http://abyz.me.uk/rpi/pigpio/examples.html
 
-   gcc -o MCP4728.so -shared -fPIC MCP4728.c
+   Header for MCP4728.c
 */
 
 #include <stdio.h>
@@ -16,57 +16,12 @@
 #include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
 
-/* TINY GPIO VARIABLES */
-
-#define GPSET0 7
-#define GPSET1 8
-
-#define GPCLR0 10
-#define GPCLR1 11
-
-#define GPLEV0 13
-#define GPLEV1 14
-
-#define GPPUD     37
-#define GPPUDCLK0 38
-#define GPPUDCLK1 39
+#include "MCP4728.h"
 
 /* GPIO address */
 static volatile uint32_t  *gpioReg = MAP_FAILED;
 
-#define PI_BANK (gpio>>5)
-#define PI_BIT  (1<<(gpio&0x1F))
-
-/* gpio modes */
-
-#define PI_INPUT  0
-#define PI_OUTPUT 1
-#define PI_ALT0   4
-#define PI_ALT1   5
-#define PI_ALT2   6
-#define PI_ALT3   7
-#define PI_ALT4   3
-#define PI_ALT5   2
-
-/* values for pull-ups/downs off, pull-down && pull-up */
-
-#define PI_PUD_OFF  0
-#define PI_PUD_DOWN 1
-#define PI_PUD_UP   2
-
-/* LOCAL VARIABLES */
-
-#define UNDEFINED 0xFFFF
-
-struct chip
-{
-   unsigned sda;
-   unsigned scl;
-   unsigned ldac;
-   unsigned address;
-   unsigned bus;
-};
-
+/* Current Chip Data */
 struct chip *curchip;
 
 /* struct chip mychipdata;
@@ -397,7 +352,7 @@ struct chip *initialise(int sda, int scl, int ldac, int address)
 {
    struct chip *tempchip = malloc(sizeof(struct chip));
 
-   if((sda>27) || (sda<0) || (scl>27) || (scl<0)) fprintf(stderr, "SDA and SCL out of range");
+   if((sda>27) || (sda<0) || (scl>27) || (scl<0)) fprintf(stderr, "SDA and SCL out of range\n");
    if((address>0x07) || (address<0x00)) address = 0x60 | address;
    if((address>0x67) || (address<0x60)) address=UNDEFINED;
    if((ldac>27) || (ldac<0)) ldac=UNDEFINED;
@@ -421,7 +376,7 @@ struct chip *initialise(int sda, int scl, int ldac, int address)
       {
          char *filename = (char*)"/dev/i2c-0";
          file_i2c_0 = open(filename, O_RDWR);
-         if (file_i2c_0 < 0) fprintf(stderr, "Failed to open the i2c-0 bus");
+         if (file_i2c_0 < 0) fprintf(stderr, "Failed to open the i2c-0 bus\n");
          else init_i2c_0=true;
       }
    }
@@ -434,7 +389,7 @@ struct chip *initialise(int sda, int scl, int ldac, int address)
       {
          char *filename = (char*)"/dev/i2c-1";
          file_i2c_1 = open(filename, O_RDWR);
-         if (file_i2c_1 < 0) fprintf(stderr, "Failed to open the i2c-1 bus");
+         if (file_i2c_1 < 0) fprintf(stderr, "Failed to open the i2c-1 bus\n");
          else init_i2c_1=true;
       }
    }
