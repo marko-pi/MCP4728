@@ -88,6 +88,12 @@ res2 = getaddress(chip2)
 
 print('Chip I2C addresses: 0x%x 0x%x' % (res1, res2))
 
+# set one address
+#err = setaddress(chip2, 0x62)
+#if err == 0:
+#    time.sleep(0.05)
+#    print('New chip I2C address: 0x%x' % getaddress(chip2))	
+
 # sets four absolute voltages on the first chip
 voltages=[1.0,1.5,2.0,2.5]
 floats = (c_float*4)(*voltages) # voltage list has to be trasferred in the C compatible array

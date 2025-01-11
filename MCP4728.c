@@ -1,6 +1,10 @@
 /*
-    Marko Pinteric 2020
+    Marko Pinteric 2020-2025
     GPIO communication based on Tiny GPIO Access on http://abyz.me.uk/rpi/pigpio/examples.html
+
+    Version 2:
+        - A more precise 10kHz timing;
+        - The SDA line has the 7% clock period delay, mimicking Raspberry Pi's I2C kernel performance.
 
     to compile shared object: gcc -o MCP4728.so -shared -fPIC MCP4728.c
 */
@@ -32,7 +36,7 @@
 #define GPPUDCLK1 39
 
 /* GPIO address */
-static volatile uint32_t  *gpioReg = MAP_FAILED;
+volatile static uint32_t  *gpioReg = MAP_FAILED;
 
 #define PI_BANK (gpio>>5)
 #define PI_BIT  (1<<(gpio&0x1F))
@@ -58,6 +62,7 @@ static volatile uint32_t  *gpioReg = MAP_FAILED;
 
 #define UNDEFINED 0xFFFF
 
+/* data for single instance of the chip */
 struct chip
 {
     unsigned sda;
@@ -69,9 +74,7 @@ struct chip
 
 struct chip *curchip;
 
-/* struct chip mychipdata;
-struct chip *mychip = &mychipdata; */
-
+/* time of the last clocked GPIO pin mode change */
 struct timespec ttime;
 /* communication initialised */
 bool init_gpio=false, init_i2c_0=false, init_i2c_1=false;
@@ -145,6 +148,89 @@ int gpioInitialise(void)
     return 0;
 }
 
+/* LOCAL METHODS FOR MANIPULATING GPIO PINS IN REGARD TO CLOCK */
+
+/* write GPIO pin 7% clock period from from the last clocked GPIO pin mode change */
+void gpioWriteShifted(unsigned gpio, unsigned mode)
+{
+    struct timespec ctime;
+    uint64_t ntime;
+    int reg, shift;
+
+    reg   =  gpio/10;
+    shift = (gpio%10) * 3;
+
+    /* 700ns is 7% clock period for 10kHz */
+    ntime = ttime.tv_sec * (uint64_t)1000000000L + ttime.tv_nsec + 700;
+    while(1)
+    {
+        clock_gettime(CLOCK_MONOTONIC,&ctime);
+        if (ctime.tv_sec * (uint64_t)1000000000L + ctime.tv_nsec >= ntime) break;
+    }
+
+    gpioReg[reg] = (gpioReg[reg] & ~(7<<shift)) | (mode<<shift);
+}
+
+/* read GPIO pin 7% clock period from the last clocked GPIO pin mode change */
+unsigned gpioReadShifted(unsigned gpio)
+{
+    struct timespec ctime;
+    uint64_t ntime;
+
+    /* 700ns is 7% clock period for 10kHz */
+    ntime = ttime.tv_sec * (uint64_t)1000000000L + ttime.tv_nsec + 700;
+    while(1)
+    {
+        clock_gettime(CLOCK_MONOTONIC,&ctime);
+        if (ctime.tv_sec * (uint64_t)1000000000L + ctime.tv_nsec >= ntime) break;
+    }
+
+    if ((*(gpioReg + GPLEV0 + (gpio>>5)) & (1<<(gpio&0x1F))) != 0) return(1);
+    else return(0);
+
+}
+
+/* write GPIO pin 50% clock period from from the last clocked GPIO pin mode change */
+void gpioWriteTarget(unsigned gpio, unsigned mode)
+{
+    struct timespec ctime;
+    uint64_t ntime;
+
+    int reg, shift;
+
+    reg   =  gpio/10;
+    shift = (gpio%10) * 3;
+
+    clock_gettime(CLOCK_MONOTONIC,&ctime);
+    /* if less than 7% of clock period remains, the Raspberry Pi got distracted, make at least 7% */
+    /* 700ns is 7% clock period, 4300ns is (50%-7%) clock period for 10kHz */
+    if (ctime.tv_sec * (uint64_t)1000000000L + ctime.tv_nsec >= ttime.tv_sec * (uint64_t)1000000000L + ttime.tv_nsec + 4300)
+    {
+        ttime = ctime; 
+        ttime.tv_nsec = ttime.tv_nsec + 700;
+    }
+    /* 5000ns is 50% clock period for 10kHz */
+    else
+    {
+        ttime.tv_nsec = ttime.tv_nsec + 5000;
+    }
+
+    if(ttime.tv_nsec >= 1000000000L)
+    {
+        ttime.tv_nsec = ttime.tv_nsec - 1000000000L;
+        ttime.tv_sec = ttime.tv_sec + 1;
+    }            
+
+    ntime = ttime.tv_sec * (uint64_t)1000000000L + ttime.tv_nsec;
+    while(1)
+    {
+        clock_gettime(CLOCK_MONOTONIC,&ctime);
+        if (ctime.tv_sec * (uint64_t)1000000000L + ctime.tv_nsec >= ntime) break;
+    }
+
+    gpioReg[reg] = (gpioReg[reg] & ~(7<<shift)) | (mode<<shift);
+}
+
 /* LOCAL GPIO METHODS */
 /* all assume && leave SCL low, except when specified differently */
 
@@ -174,144 +260,113 @@ void stop_gpio()
     }
 }
 
-void clock_wait()
-{
-    struct timespec ctime;
-    uint64_t ntime;
-    ntime = ttime.tv_sec * (uint64_t)1000000000L + ttime.tv_nsec + 5000;
-    while(1)
-    {
-        clock_gettime(CLOCK_MONOTONIC,&ctime);
-        if (ctime.tv_sec * (uint64_t)1000000000L + ctime.tv_nsec >= ntime) return;
-    }
-}
-
 /* following method assumes SCL && SDA high */
 void i2cstart()
 {
-    gpioSetMode(curchip->sda, PI_OUTPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    gpioSetMode(curchip->scl, PI_OUTPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
+    gpioWriteTarget(curchip->sda, PI_OUTPUT);
+    gpioWriteTarget(curchip->scl, PI_OUTPUT);
 }
 
 void i2crestart()
 {
-    gpioSetMode(curchip->sda, PI_INPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    gpioSetMode(curchip->scl, PI_INPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    gpioSetMode(curchip->sda, PI_OUTPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    gpioSetMode(curchip->scl, PI_OUTPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
+    gpioWriteTarget(curchip->sda, PI_INPUT);
+    gpioWriteTarget(curchip->scl, PI_INPUT);
+    gpioWriteTarget(curchip->sda, PI_OUTPUT);
+    gpioWriteTarget(curchip->scl, PI_OUTPUT);
 }
 
 /* following methods leave SCL && SDA high */
 void i2cstop()
 {
-    gpioSetMode(curchip->sda, PI_OUTPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    gpioSetMode(curchip->scl, PI_INPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    gpioSetMode(curchip->sda, PI_INPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
+    gpioWriteTarget(curchip->sda, PI_OUTPUT);
+    gpioWriteTarget(curchip->scl, PI_INPUT);
+    gpioWriteTarget(curchip->sda, PI_INPUT);
 }
 
 unsigned i2cgetbyte()
 {
-    unsigned data=0x00;
     unsigned i;
+    unsigned res = 0;
 
-    gpioSetMode(curchip->sda, PI_INPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    for (i=1; i<=8; i++)
+    /* release SDA line */
+    gpioWriteShifted(curchip->sda, PI_INPUT);
+
+    for (i=0; i<8; i++)
     {
-        /* slave sends bit */
-        clock_wait();
-        gpioSetMode(curchip->scl, PI_INPUT);
-        clock_gettime(CLOCK_MONOTONIC,&ttime);
-        data = data << 1;
-        clock_wait();
-        /* I2C clock stretching */
-        while(gpioRead(curchip->scl) == 0) ;
-        if (gpioRead(curchip->sda) == 1) data = data | 0x01;
-        gpioSetMode(curchip->scl, PI_OUTPUT);
-        clock_gettime(CLOCK_MONOTONIC,&ttime);
+        /* rise SCL line */
+        gpioWriteTarget(curchip->scl, PI_INPUT);
+
+        if (gpioReadShifted(curchip->sda) != 0) res = res | (0x80 >> i);
+
+        /* drop SCL line */
+        gpioWriteTarget(curchip->scl, PI_OUTPUT);
     }
-    return(data);
+    return(res);
 }
 
-void i2csendbyte(unsigned data)
+void i2csendbyte(unsigned res)
 {
+    unsigned mode;
     unsigned i;
 
-    for (i=1; i<=8; i++)
+    for (i=0; i<8; i++)
     {
-        if ((data & 0x80) == 0) gpioSetMode(curchip->sda, PI_OUTPUT);
-        else gpioSetMode(curchip->sda, PI_INPUT);
-        clock_gettime(CLOCK_MONOTONIC,&ttime);
-        data = data << 1;
-        clock_wait();
-        gpioSetMode(curchip->scl, PI_INPUT);
-        clock_gettime(CLOCK_MONOTONIC,&ttime);
-        clock_wait();
-        gpioSetMode(curchip->scl, PI_OUTPUT);
+        /* set SDA line */
+        if((res & 0x80) == 0x80) mode = PI_INPUT;
+        else mode = PI_OUTPUT;
+        gpioWriteShifted(curchip->sda, mode);
+        res = res << 1;
+
+        /* rise SCL line */
+        gpioWriteTarget(curchip->scl, PI_INPUT);
+
+        /* drop SCL line */
+        gpioWriteTarget(curchip->scl, PI_OUTPUT);
     }
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
 }
 
 unsigned i2cgetack()
 {
-    unsigned result;
+    unsigned res;
 
-    gpioSetMode(curchip->sda, PI_INPUT);
-    /* slave sends bit */
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    gpioSetMode(curchip->scl, PI_INPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    if (gpioRead(curchip->sda) == 0) result=1;
-    else result=0;
-    /* read SDA */
-    gpioSetMode(curchip->scl, PI_OUTPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    return(result);
+    /* release SDA line */
+    gpioWriteShifted(curchip->sda, PI_INPUT);
+
+    /* rise SCL line */
+    gpioWriteTarget(curchip->scl, PI_INPUT);
+
+    /* read SDA line */
+    if (gpioReadShifted(curchip->sda) != 0) res = 1;
+    else res = 0;
+
+    /* drop SCL line */
+    gpioWriteTarget(curchip->scl, PI_OUTPUT);
+
+    return(res);
 }
 
 void i2csendack()
 {
-    gpioSetMode(curchip->sda, PI_OUTPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    gpioSetMode(curchip->scl, PI_INPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    gpioSetMode(curchip->scl, PI_OUTPUT);
+    /* rise SDA line */
+    gpioWriteShifted(curchip->sda, PI_OUTPUT);
+
+    /* rise SCL line */
+    gpioWriteTarget(curchip->scl, PI_INPUT);
+
+    /* drop SCL line */
+    gpioWriteTarget(curchip->scl, PI_OUTPUT);
 }
 
 void i2csendnack()
 {
-    gpioSetMode(curchip->sda, PI_INPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    gpioSetMode(curchip->scl, PI_INPUT);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
-    clock_wait();
-    gpioSetMode(curchip->scl, PI_OUTPUT);
+    /* drop SDA line */
+    gpioWriteShifted(curchip->sda, PI_INPUT);
+
+    /* rise SCL line */
+    gpioWriteTarget(curchip->scl, PI_INPUT);
+
+    /* drop SCL line */
+    gpioWriteTarget(curchip->scl, PI_OUTPUT);
 }
 
 /* LOCAL I2C METHODS */
@@ -419,10 +474,10 @@ struct chip *initialise(int sda, int scl, int ldac, int address)
         count_i2c_0 = count_i2c_0 + 1;
         if (!init_i2c_0)
         {
-             char *filename = (char*)"/dev/i2c-0";
-             file_i2c_0 = open(filename, O_RDWR);
-             if (file_i2c_0 < 0) fprintf(stderr, "Failed to open the i2c-0 bus\n");
-             else init_i2c_0=true;
+            char *filename = (char*)"/dev/i2c-0";
+            file_i2c_0 = open(filename, O_RDWR);
+            if (file_i2c_0 < 0) fprintf(stderr, "Failed to open the i2c-0 bus\n");
+            else init_i2c_0=true;
         }
     }
 
@@ -432,10 +487,10 @@ struct chip *initialise(int sda, int scl, int ldac, int address)
         count_i2c_1 = count_i2c_1 + 1;
         if (!init_i2c_1)
         {
-             char *filename = (char*)"/dev/i2c-1";
-             file_i2c_1 = open(filename, O_RDWR);
-             if (file_i2c_1 < 0) fprintf(stderr, "Failed to open the i2c-1 bus\n");
-             else init_i2c_1=true;
+            char *filename = (char*)"/dev/i2c-1";
+            file_i2c_1 = open(filename, O_RDWR);
+            if (file_i2c_1 < 0) fprintf(stderr, "Failed to open the i2c-1 bus\n");
+            else init_i2c_1=true;
         }
     }
     return(tempchip);
@@ -473,17 +528,21 @@ int getaddress(struct chip *tempchip)
 
     curchip=tempchip;
     if (!init_gpio || (curchip->ldac==0)) return(0x1000);
-    clock_gettime(CLOCK_MONOTONIC,&ttime);
     start_gpio();
+    clock_gettime(CLOCK_MONOTONIC,&ttime);
     i2cstart();
     i2csendbyte(0x00);
     errs[0]=i2cgetack();
     i2csendbyte(0x0C);
-    gpioSetMode(curchip->ldac, PI_OUTPUT);
+
+    gpioWriteShifted(curchip->ldac, PI_OUTPUT);
+
     errs[1]=i2cgetack();
     i2crestart();
     i2csendbyte(0xC1);
-    gpioSetMode(curchip->ldac, PI_INPUT);
+
+    gpioWriteShifted(curchip->ldac, PI_INPUT);
+
     errs[2]=i2cgetack();
     res=i2cgetbyte();
     i2csendnack();
@@ -492,11 +551,11 @@ int getaddress(struct chip *tempchip)
     addr[0] = (res & 0xE0) >> 5;
     addr[1] = (res & 0x0E) >> 1;
 
-    if ((addr[0] != addr[1]) || ((res & 0x11) != 0x10)) errs[3] = 0;
-    else errs[3] = 1;
+    if ((addr[0] != addr[1]) || ((res & 0x11) != 0x10)) errs[3] = 1;
+    else errs[3] = 0;
     for (i=0; i<=3; i++)
     {
-        if (errs[i]==0) err = err | (0x08 >> i);
+        if (errs[i]!=0) err = err | (0x08 >> i);
     }
     if (err>0)
     {
@@ -544,7 +603,7 @@ int setaddress(struct chip *tempchip, unsigned addr)
 
     for (i=0; i<=3; i++)
     {
-        if (errs[i]==0) err = err | (0x08 >> i);
+        if (errs[i]!=0) err = err | (0x08 >> i);
     }
     if (err>0) ret=-(int)err;
     else
