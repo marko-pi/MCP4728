@@ -5,9 +5,11 @@ Raspberry Pi library for the MCP4728 Quad DAC chip.  It allows
 
 Reading and writing address for the MCP4728 chip requires an additional `LDAC` line and is not compliant with the `I2C` protocol, so bitbanging must be used. Do not forget to provide a pull-up resistor for the `LDAC` line!
 
-The core of the project is an OOP (object oriented programming) compatible C library (`MCP4728.so`).  There are two reasons for this step:
+The core of the project is an OOP (object oriented programming) compatible C library.  There are two reasons for this step:
 - There is no need for any other library (`RPi.GPIO`, `pigpio`...) to execute the code;
 - The bitbanging part of the library is much faster and time consistent.
+
+To create C library execute `make` (library in local directory) or `make install` (shared library).
 
 Version 2 also offers additional improvements:
 - A more precise 10kHz timing;
@@ -26,5 +28,3 @@ The library provides eight public functions: two functions for initialisation/de
 A simple Python script is provided as an example of how to use the library. A proper Python library could easily be created to wrap all procedures in a standard Python class. Since I assume that only advanced users will use this library, I think that the sample Python script is sufficient.
 
 When the chip operates in internal source mode, it provides `gain=1` for voltages up to 2.048 V and `gain=2` for voltages up to 4.096 V or VDD, whichever is smaller.  The library automatically selects `gain=1` when a voltage up to 2 V is requested and `gain=2` when a voltage above 2 V is requested.
-
-IMPORTANT: The shared object `MCP4728.so` must be located in the same folder as the Python script.  The shared object is compiled with `gcc -o MCP4728.so -shared -fPIC MCP4728.c`.

@@ -6,7 +6,8 @@
         - A more precise 10kHz timing;
         - The SDA line has the 7% clock period delay, mimicking Raspberry Pi's I2C kernel performance.
 
-    to compile shared object: gcc -o MCP4728.so -shared -fPIC MCP4728.c
+    To create C library execute 'make' (library in local directory) or 'make install' (shared library).
+    To remove C library execute 'make clear' (library in local directory) or 'make uninstall' (shared library).
 */
 
 #include <stdio.h>
@@ -206,7 +207,7 @@ void gpioWriteTarget(unsigned gpio, unsigned mode)
     /* 700ns is 7% clock period, 4300ns is (50%-7%) clock period for 10kHz */
     if (ctime.tv_sec * (uint64_t)1000000000L + ctime.tv_nsec >= ttime.tv_sec * (uint64_t)1000000000L + ttime.tv_nsec + 4300)
     {
-        ttime = ctime; 
+        ttime = ctime;
         ttime.tv_nsec = ttime.tv_nsec + 700;
     }
     /* 5000ns is 50% clock period for 10kHz */
@@ -219,7 +220,7 @@ void gpioWriteTarget(unsigned gpio, unsigned mode)
     {
         ttime.tv_nsec = ttime.tv_nsec - 1000000000L;
         ttime.tv_sec = ttime.tv_sec + 1;
-    }            
+    }
 
     ntime = ttime.tv_sec * (uint64_t)1000000000L + ttime.tv_nsec;
     while(1)

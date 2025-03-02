@@ -1,8 +1,15 @@
 import time
 from ctypes import cdll, c_int, c_float, c_bool, c_void_p, POINTER
 
-###### Wrapping C library ######
-MCP4728 = cdll.LoadLibrary("./MCP4728.so")
+##### WRAPPING C LIBRARY (local directory or shared) #####
+try:
+    MCP4728 = cdll.LoadLibrary("./MCP4728.so")
+except OSError:
+    try:
+        MCP4728 = cdll.LoadLibrary("libMCP4728.so")
+    except OSError:
+        print('Library \'MCP4728\' not available.  Execute \'make\' or \'make install\'.')
+        exit()
 
 """
 # object = initialise(sda, scl, ldac, address)
@@ -76,7 +83,7 @@ multipleexternal = MCP4728.multipleexternal
 multipleexternal.argtypes = [c_void_p, POINTER(c_float), c_bool]
 
 
-###### Test example ######
+##### Test example #####
 
 # creates instances of two chips with unknown addresses, both reading/writing the address and changing the output voltages over the i2c-1 bus allowed.
 chip1 = initialise(2,3,16,-1)
@@ -92,7 +99,7 @@ print('Chip I2C addresses: 0x%x 0x%x' % (res1, res2))
 #err = setaddress(chip2, 0x62)
 #if err == 0:
 #    time.sleep(0.05)
-#    print('New chip I2C address: 0x%x' % getaddress(chip2))	
+#    print('New chip I2C address: 0x%x' % getaddress(chip2))
 
 # sets four absolute voltages on the first chip
 voltages=[1.0,1.5,2.0,2.5]
